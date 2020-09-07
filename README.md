@@ -17,7 +17,7 @@
                         [--target-delete-query=<targetDeleteQuery>]
                         [--target-sharding-config=<targetShardingConfig>]
                         [--target-table=<targetTable>] [--workers=<workers>]
-          --confi-file=<configFile>
+          --config-file=<configFile>
                                 Config file
           --export-query=<exportQuery>
                                 Export query for source database
