@@ -31,7 +31,7 @@ public class Main implements Callable<Integer> {
 
 	public static Config CONFIG;
 
-	@Option(names = { "--confi-file" }, description = "Config file", required = true)
+	@Option(names = { "--config-file" }, description = "Config file", required = true)
 	private String configFile;
 
 	@Option(names = { "--workers" }, description = "Wokers for loading target")
