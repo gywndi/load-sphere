@@ -40,7 +40,6 @@ The lower setting is an example of the following operation.
 2. Generate new ID with idGenerator
 3. Split result to uldra and uldra_part
 (sourceDS! **useCursorFetch=true** is important to avoid OOM) 
-
     workers: 8
     sourceDS: !!org.apache.commons.dbcp2.BasicDataSource
       url: jdbc:mysql://127.0.0.1:3306/origin?autoReconnect=true&useCursorFetch=true
