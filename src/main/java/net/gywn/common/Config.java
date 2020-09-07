@@ -20,7 +20,7 @@ import lombok.ToString;
 @ToString
 public class Config {
 
-	private int workers;
+	private int workers = 8;
 	private String sourceURL;
 	private String sourceUsername;
 	private String sourcePassword;
