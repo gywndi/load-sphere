@@ -79,6 +79,14 @@ sourceDS! **useCursorFetch=true** is important to avoid OOM
     ###########################################
     # SOURCE
     ###########################################
+    CREATE TABLE `origin`.`uldra` (
+      `id` int NOT NULL AUTO_INCREMENT,
+      `name` varchar(30) NOT NULL,
+      `cont` varchar(100) NOT NULL,
+      `dttm` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB;
+    
     mysql> select * from origin.uldra limit 5;
     +----+-----------------+----------------------------------+---------------------+
     | id | name            | cont                             | dttm                |
@@ -94,6 +102,23 @@ sourceDS! **useCursorFetch=true** is important to avoid OOM
     ###########################################
     # TARGET
     ###########################################
+    CREATE TABLE `shard`.`uldra` (
+      `id` int NOT NULL AUTO_INCREMENT,
+      `guid` bigint NOT NULL DEFAULT '0',
+      `name` varchar(30) NOT NULL,
+      `cont` varchar(100) NOT NULL,
+      `dttm` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB;
+
+    CREATE TABLE `shard`.`uldra_part` (
+      `id` int NOT NULL AUTO_INCREMENT,
+      `guid` bigint NOT NULL DEFAULT '0',
+      `name` varchar(30) NOT NULL,
+      `dttm` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB;
+
     mysql> select * from shard.uldra limit 5;
     +----+---------------------+-----------------+----------------------------------+---------------------+
     | id | guid                | name            | cont                             | dttm                |
