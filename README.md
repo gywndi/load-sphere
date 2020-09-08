@@ -10,7 +10,6 @@
     java -jar target/load-sphere-0.0.1-jar-with-dependencies.jar --config-file="config-mysql.yml"
 
 ## Usage
-    Missing required option: '--confi-file=<configFile>'
     Usage: <main class> --confi-file=<configFile> [--export-query=<exportQuery>]
                         [--source-sharding-config=<sourceShardingConfig>]
                         [--target-columns=<targetColumns>]
