@@ -32,7 +32,9 @@ public class Config {
 	private TargetTable[] targetTables;
 	private boolean upsert = false;
 
-	public static Config unmarshal(final File yamlFile) throws IOException {
+	public static Config unmarshal(final File yamlFile) throws IOException, ClassNotFoundException {
+		Class.forName("com.mysql.jdbc.Driver");
+		Class.forName("oracle.jdbc.driver.OracleDriver");
 		try (FileInputStream fileInputStream = new FileInputStream(yamlFile);
 				InputStreamReader inputStreamReader = new InputStreamReader(fileInputStream, "UTF-8")) {
 			return new Yaml(new Constructor(Config.class)).loadAs(inputStreamReader, Config.class);
