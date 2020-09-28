@@ -65,7 +65,7 @@ public class Main implements Callable<Integer> {
 		if (exitCode == 0) {
 			try {
 				loadSphere.migrationStart();
-			}catch(Exception e) {
+			} catch (Exception e) {
 				System.out.println(e);
 				System.exit(1);
 			}
@@ -176,8 +176,8 @@ public class Main implements Callable<Integer> {
 					System.out.println(">> Params not defined");
 					return 1;
 				}
-				
-				Class<?> c=Class.forName(idGenerator.getClassName());
+
+				Class<?> c = Class.forName(idGenerator.getClassName());
 				IDGeneratorHandler handler = (IDGeneratorHandler) c.newInstance();
 				idGenerator.setIdGeneratorHandler(handler);
 
@@ -264,7 +264,15 @@ public class Main implements Callable<Integer> {
 		connection = CONFIG.getSourceDS().getConnection();
 		Statement statement = connection.createStatement(java.sql.ResultSet.TYPE_FORWARD_ONLY,
 				java.sql.ResultSet.CONCUR_READ_ONLY);
-		statement.setFetchSize(1000);
+
+		try {
+			statement.executeQuery("select * from information_schema.engines");
+			System.out.println("Source is mysql, set fetch size to Integer.MIN_VALUE");
+			statement.setFetchSize(Integer.MIN_VALUE);
+		}catch(Exception e) {
+			System.out.println("Source is not mysql, set fetch size to 5000");
+			statement.setFetchSize(5000);
+		}
 
 		System.out.println("> Get result set start");
 		ResultSet rs = statement.executeQuery(CONFIG.getExportQuery());
@@ -402,7 +410,7 @@ public class Main implements Callable<Integer> {
 				}
 			}
 		}
-		System.out.println("Retry count("+CONFIG.getRetryCount()+") has been exceeded, exit");
+		System.out.println("Retry count(" + CONFIG.getRetryCount() + ") has been exceeded, exit");
 		System.exit(1);
 	}
 
