@@ -59,145 +59,154 @@ public class Main implements Callable<Integer> {
 
 	private final BlockingQueue<Map<String, String>> queue = new ArrayBlockingQueue<Map<String, String>>(1000);
 
-	public static void main(String[] args) throws SQLException {
+	public static void main(String[] args) {
 		Main loadSphere = new Main();
 		Integer exitCode = new CommandLine(loadSphere).execute(args);
 		if (exitCode == 0) {
-			loadSphere.migrationStart();
+			try {
+				loadSphere.migrationStart();
+			}catch(Exception e) {
+				System.out.println(e);
+				System.exit(1);
+			}
 		}
 	}
 
 	@Override
-	public Integer call() throws Exception {
-
-		File file = null;
-
-		// =============================
-		// Unmarshal config file
-		// =============================
-		file = new File(configFile);
-		if (!file.exists()) {
-			System.out.println("Config file not exists");
-			return 1;
-		}
-
-		CONFIG = Config.unmarshal(file);
-
-		if (workers != null) {
-			CONFIG.setWorkers(workers);
-		}
-
-		// ===============================
-		// Unmarshal source sharing config
-		// ===============================
-		if (sourceShardingConfig != null) {
-			file = new File(sourceShardingConfig);
-			if (!file.exists()) {
-				System.out.println("Source config file not exists");
-				return 1;
-			}
-
-			DataSource ds = YamlShardingDataSourceFactory.createDataSource(file);
-			System.out.println("Set source datasource from " + sourceShardingConfig);
-			CONFIG.setTargetDS(ds);
-		}
-
-		if (targetShardingConfig != null) {
-			file = new File(targetShardingConfig);
-			if (!file.exists()) {
-				System.out.println("Target config file not exists");
-				return 1;
-			}
-
-			DataSource ds = YamlShardingDataSourceFactory.createDataSource(file);
-			System.out.println("Set target datasource from " + targetShardingConfig);
-			CONFIG.setTargetDS(ds);
-			if (CONFIG.isUpsert()) {
-				System.out.println("Shardingsphere doesn't support upsert query, set upsert false");
-				CONFIG.setUpsert(false);
-			}
-		}
-
-		if (exportQuery != null) {
-			CONFIG.setExportQuery(exportQuery);
-		}
-
-		TargetTable customTargetTable;
-		boolean useCustomTargetTable = false;
+	public Integer call() {
 		try {
-			customTargetTable = CONFIG.getTargetTables()[0];
-		} catch (Exception e) {
-			customTargetTable = new TargetTable();
-		}
+			File file = null;
 
-		if (targetTable != null) {
-			customTargetTable.setName(targetTable);
-			useCustomTargetTable = true;
-		}
-
-		if (targetDeleteQuery != null) {
-			customTargetTable.setDeleteQuery(targetDeleteQuery);
-			useCustomTargetTable = true;
-		}
-
-		if (targetColumns != null) {
-			String[] columns = targetColumns.replaceAll("\\s", "").toLowerCase().split(",");
-			customTargetTable.setColumns(columns);
-			useCustomTargetTable = true;
-		}
-
-		if (useCustomTargetTable) {
-			TargetTable[] targetTables = { customTargetTable };
-			CONFIG.setTargetTables(targetTables);
-		}
-
-		IDGenerator idGenerator = CONFIG.getIdGenerator();
-		if (idGenerator == null) {
-			System.out.println("ID Generator is not defined, do nothing");
-			idGenerator = new IDGenerator();
-			CONFIG.setIdGenerator(idGenerator);
-		}
-
-		if (idGenerator.getClassName() != null) {
-
-			System.out.println("Initialize class: " + idGenerator.getClassName());
-
-			if (idGenerator.getColumnName() == null) {
-				System.out.println(">> Column name not defined");
+			// =============================
+			// Unmarshal config file
+			// =============================
+			file = new File(configFile);
+			if (!file.exists()) {
+				System.out.println("Config file not exists");
 				return 1;
 			}
 
-			if (idGenerator.getParams() == null || idGenerator.getParams().length == 0) {
-				System.out.println(">> Params not defined");
-				return 1;
+			CONFIG = Config.unmarshal(file);
+
+			if (workers != null) {
+				CONFIG.setWorkers(workers);
 			}
 
-			IDGeneratorHandler handler = (IDGeneratorHandler) (Class.forName(idGenerator.getClassName()).newInstance());
-			idGenerator.setIdGeneratorHandler(handler);
+			// ===============================
+			// Unmarshal source sharing config
+			// ===============================
+			if (sourceShardingConfig != null) {
+				file = new File(sourceShardingConfig);
+				if (!file.exists()) {
+					System.out.println("Source config file not exists");
+					return 1;
+				}
 
-		}
+				DataSource ds = YamlShardingDataSourceFactory.createDataSource(file);
+				System.out.println("Set source datasource from " + sourceShardingConfig);
+				CONFIG.setTargetDS(ds);
+			}
 
-		// ============================
-		// Start load threads
-		// ============================
-		System.out.println(">> Load thread counts " + CONFIG.getWorkers());
-		for (int i = 0; i < CONFIG.getWorkers(); i++) {
-			new Thread(new Runnable() {
-				public void run() {
-					while (true) {
-						try {
-							Map<String, String> entry = queue.take();
-							generateID(entry);
-							insertRows(entry);
-						} catch (Exception e) {
-							System.out.println(e);
-							System.exit(1);
+			if (targetShardingConfig != null) {
+				file = new File(targetShardingConfig);
+				if (!file.exists()) {
+					System.out.println("Target config file not exists");
+					return 1;
+				}
+
+				DataSource ds = YamlShardingDataSourceFactory.createDataSource(file);
+				System.out.println("Set target datasource from " + targetShardingConfig);
+				CONFIG.setTargetDS(ds);
+				if (CONFIG.isUpsert()) {
+					System.out.println("Shardingsphere doesn't support upsert query, set upsert false");
+					CONFIG.setUpsert(false);
+				}
+			}
+
+			if (exportQuery != null) {
+				CONFIG.setExportQuery(exportQuery);
+			}
+
+			TargetTable customTargetTable;
+			boolean useCustomTargetTable = false;
+			try {
+				customTargetTable = CONFIG.getTargetTables()[0];
+			} catch (Exception e) {
+				customTargetTable = new TargetTable();
+			}
+
+			if (targetTable != null) {
+				customTargetTable.setName(targetTable);
+				useCustomTargetTable = true;
+			}
+
+			if (targetDeleteQuery != null) {
+				customTargetTable.setDeleteQuery(targetDeleteQuery);
+				useCustomTargetTable = true;
+			}
+
+			if (targetColumns != null) {
+				String[] columns = targetColumns.replaceAll("\\s", "").toLowerCase().split(",");
+				customTargetTable.setColumns(columns);
+				useCustomTargetTable = true;
+			}
+
+			if (useCustomTargetTable) {
+				TargetTable[] targetTables = { customTargetTable };
+				CONFIG.setTargetTables(targetTables);
+			}
+
+			IDGenerator idGenerator = CONFIG.getIdGenerator();
+			if (idGenerator == null) {
+				System.out.println("ID Generator is not defined, do nothing");
+				idGenerator = new IDGenerator();
+				CONFIG.setIdGenerator(idGenerator);
+			}
+
+			if (idGenerator.getClassName() != null) {
+
+				System.out.println("Initialize class: " + idGenerator.getClassName());
+
+				if (idGenerator.getColumnName() == null) {
+					System.out.println(">> Column name not defined");
+					return 1;
+				}
+
+				if (idGenerator.getParams() == null || idGenerator.getParams().length == 0) {
+					System.out.println(">> Params not defined");
+					return 1;
+				}
+
+				IDGeneratorHandler handler = (IDGeneratorHandler) (Class.forName(idGenerator.getClassName())
+						.newInstance());
+				idGenerator.setIdGeneratorHandler(handler);
+
+			}
+
+			// ============================
+			// Start load threads
+			// ============================
+			System.out.println(">> Load thread counts " + CONFIG.getWorkers());
+			for (int i = 0; i < CONFIG.getWorkers(); i++) {
+				new Thread(new Runnable() {
+					public void run() {
+						while (true) {
+							try {
+								Map<String, String> entry = queue.take();
+								generateID(entry);
+								insertRows(entry);
+							} catch (Exception e) {
+								System.out.println(e);
+								System.exit(1);
+							}
 						}
 					}
-				}
-			}).start();
+				}).start();
+			}
+		} catch (Exception e) {
+			System.out.println(e);
+			System.exit(1);
 		}
-
 		return 0;
 	}
 
