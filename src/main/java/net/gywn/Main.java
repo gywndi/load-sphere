@@ -176,9 +176,9 @@ public class Main implements Callable<Integer> {
 					System.out.println(">> Params not defined");
 					return 1;
 				}
-
-				IDGeneratorHandler handler = (IDGeneratorHandler) (Class.forName(idGenerator.getClassName())
-						.newInstance());
+				
+				Class<?> c=Class.forName(idGenerator.getClassName());
+				IDGeneratorHandler handler = (IDGeneratorHandler) c.newInstance();
 				idGenerator.setIdGeneratorHandler(handler);
 
 			}
