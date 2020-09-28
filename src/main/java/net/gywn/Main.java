@@ -373,10 +373,12 @@ public class Main implements Callable<Integer> {
 	// ================================
 	private void insertRows(final Map<String, String> entry) {
 		Connection conn = null;
+		int execCount = 0;
 
-		while (true) {
+		while (execCount < CONFIG.getRetryCount()) {
 			PreparedStatement pstmt = null;
 			try {
+				execCount++;
 				conn = CONFIG.getTargetDS().getConnection();
 				for (TargetTable targetTable : CONFIG.getTargetTables()) {
 					QueryType queryType = targetTable.getQueryType();
@@ -388,11 +390,11 @@ public class Main implements Callable<Integer> {
 					targetTable.getInsertedRows().addAndGet((pstmt.executeUpdate() + 1) / 2);
 					pstmt.close();
 				}
-				break;
+				return;
 			} catch (Exception e) {
 				System.out.println(e);
 				System.out.println("[ERROR] " + entry);
-				sleep(1000);
+				sleep(CONFIG.getRetryMili());
 			} finally {
 				try {
 					conn.close();
@@ -400,6 +402,8 @@ public class Main implements Callable<Integer> {
 				}
 			}
 		}
+		System.out.println("Retry count("+CONFIG.getRetryCount()+") has been exceeded, exit");
+		System.exit(1);
 	}
 
 	public static void sleep(long ms) {
