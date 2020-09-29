@@ -39,17 +39,19 @@ The lower setting is an example of the following operation.
 1. Fetch from sourceDS
 2. Generate new ID with idGenerator
 3. Split result to uldra and uldra_part
-sourceDS! **useCursorFetch=true** is important to avoid OOM
+
+- fetch size on sourceDS forced to Integer.MIN_VALUE, if sourceDS is MySQL to avoid OOM
+- extended-insert count is default 30, if sourceDS is MySQL
 
 ```yaml
 workers: 8
 sourceDS: !!org.apache.commons.dbcp2.BasicDataSource
-  url: jdbc:mysql://127.0.0.1:3306/origin?autoReconnect=true&useCursorFetch=true
+  url: jdbc:mysql://127.0.0.1:3306/origin?autoReconnect=true
   username: origin
   password: origin
 
 targetDS: !!org.apache.commons.dbcp2.BasicDataSource
-  url: jdbc:mysql://127.0.0.1:3306/shard?autoReconnect=true&useCursorFetch=true
+  url: jdbc:mysql://127.0.0.1:3306/shard?autoReconnect=true
   username: shard
   password: shard
   maxTotal: 30
@@ -61,6 +63,10 @@ targetDS: !!org.apache.commons.dbcp2.BasicDataSource
   timeBetweenEvictionRunsMillis: 60000
   minEvictableIdleTimeMillis : 1200000
   numTestsPerEvictionRun : 10
+
+retryCount: 10
+retryMili: 5000
+insertMultiCount: 30
 
 exportQuery: "select * from uldra where 1 = 1"
 idGenerator:

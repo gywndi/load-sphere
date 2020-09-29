@@ -33,6 +33,7 @@ public class Config {
 	private boolean upsert = false;
 	private int retryCount = 10;
 	private int retryMili = 5000;
+	private int insertMultiCount = 30;
 
 	public static Config unmarshal(final File yamlFile) throws IOException, ClassNotFoundException {
 		Class.forName("com.mysql.jdbc.Driver");

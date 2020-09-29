@@ -21,10 +21,12 @@ public class TargetTable {
 	private String name;
 	private String[] columns;
 	private String deleteQuery;
+	private String insertBase;
+	private String insertParam;
+	private String upsertParam;
 	private String insertQuery;
 	private String upsertQuery;
 	private final List<String> insertColumns = new ArrayList<String>();
-	private final List<String> upsertColumns = new ArrayList<String>();
 	private AtomicLong insertedRows = new AtomicLong();
 	private QueryType queryType = QueryType.INSERT;
 
@@ -32,9 +34,12 @@ public class TargetTable {
 		INSERT {
 
 			@Override
-			public String getQuery(TargetTable targetTable) {
-				// TODO Auto-generated method stub
-				return targetTable.getInsertQuery();
+			public String getQuery(TargetTable targetTable, int rowCount) {
+				StringBuffer sb = new StringBuffer();
+				for (int i = 0; i < rowCount; i++) {
+					sb.append(targetTable.getInsertParam());
+				}
+				return String.format("%s %s", targetTable.getInsertBase(), sb.toString().replaceFirst(",", ""));
 			}
 
 			@Override
@@ -46,19 +51,23 @@ public class TargetTable {
 		UPSERT {
 
 			@Override
-			public String getQuery(TargetTable targetTable) {
-				// TODO Auto-generated method stub
-				return targetTable.getUpsertQuery();
+			public String getQuery(TargetTable targetTable, int rowCount) {
+				StringBuffer sb = new StringBuffer();
+				for (int i = 0; i < rowCount; i++) {
+					sb.append(targetTable.getInsertParam());
+				}
+				return String.format("%s %s %s", targetTable.getInsertBase(), sb.toString().replaceFirst(",", ""),
+						targetTable.getUpsertParam());
 			}
 
 			@Override
 			public List<String> getColumns(TargetTable targetTable) {
 				// TODO Auto-generated method stub
-				return targetTable.getUpsertColumns();
+				return targetTable.getInsertColumns();
 			}
 		};
 
-		public abstract String getQuery(final TargetTable targetTable);
+		public abstract String getQuery(final TargetTable targetTable, final int rowCount);
 
 		public abstract List<String> getColumns(final TargetTable targetTable);
 	}

@@ -18,7 +18,9 @@ import net.gywn.algorithm.IDGeneratorHandler;
 import net.gywn.common.Config;
 import picocli.CommandLine;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -57,11 +59,12 @@ public class Main implements Callable<Integer> {
 
 	public boolean exporting = true;
 
-	private final BlockingQueue<Map<String, String>> queue = new ArrayBlockingQueue<Map<String, String>>(1000);
+	private final BlockingQueue<List<Map<String, String>>> queue = new ArrayBlockingQueue<List<Map<String, String>>>(1000);
 
 	public static void main(String[] args) {
 		Main loadSphere = new Main();
 		Integer exitCode = new CommandLine(loadSphere).execute(args);
+		
 		if (exitCode == 0) {
 			try {
 				loadSphere.migrationStart();
@@ -192,9 +195,8 @@ public class Main implements Callable<Integer> {
 					public void run() {
 						while (true) {
 							try {
-								Map<String, String> entry = queue.take();
-								generateID(entry);
-								insertRows(entry);
+								List<Map<String, String>> entries = queue.take();
+								insertRows(entries);
 							} catch (Exception e) {
 								System.out.println(e);
 								System.exit(1);
@@ -213,10 +215,10 @@ public class Main implements Callable<Integer> {
 	// ============================
 	// Enqueue
 	// ============================
-	private void enqueue(final Map<String, String> entry) {
+	private void enqueue(final List<Map<String, String>> entries) {
 		while (true) {
 			try {
-				queue.add(entry);
+				queue.add(entries);
 				break;
 			} catch (Exception e) {
 				Main.sleep(10);
@@ -267,10 +269,11 @@ public class Main implements Callable<Integer> {
 
 		try {
 			statement.executeQuery("select * from information_schema.engines");
-			System.out.println("Source is mysql, set fetch size to Integer.MIN_VALUE");
+			System.out.println("Source is mysql, set fetch size to c");
 			statement.setFetchSize(Integer.MIN_VALUE);
 		}catch(Exception e) {
-			System.out.println("Source is not mysql, set fetch size to 5000");
+			System.out.println("Source is not mysql, set fetch size to 5000 and insertMultiCount to 1");
+			CONFIG.setInsertMultiCount(1);
 			statement.setFetchSize(5000);
 		}
 
@@ -314,18 +317,20 @@ public class Main implements Callable<Integer> {
 				vals += ",?";
 				upds += String.format(",%s=values(%s)", entry.getValue(), entry.getValue());
 				targetTable.getInsertColumns().add(entry.getKey());
-				targetTable.getUpsertColumns().add(entry.getKey());
+//				targetTable.getUpsertColumns().add(entry.getKey());
 			}
+			
+			String insertBase = "";
+			insertBase += "insert into " + targetTable.getName();
+			insertBase += "(" + cols.replaceFirst(",", "") + ")";
+			insertBase += "values";
+			targetTable.setInsertBase(insertBase);
+			
+			String insertParam = ",(" + vals.replaceFirst(",", "") + ")";
+			targetTable.setInsertParam(insertParam);
 
-			String query = "";
-			query += "insert into " + targetTable.getName();
-			query += "(" + cols.replaceFirst(",", "") + ")";
-			query += "values";
-			query += "(" + vals.replaceFirst(",", "") + ")";
-			targetTable.setInsertQuery(query);
-
-			query += " on duplicate key update " + upds.replaceFirst(",", "");
-			targetTable.setUpsertQuery(query);
+			String upsertParam = " on duplicate key update " + upds.replaceFirst(",", "");
+			targetTable.setUpsertParam(upsertParam);
 
 			if (CONFIG.isUpsert()) {
 				targetTable.setQueryType(TargetTable.QueryType.UPSERT);
@@ -340,12 +345,23 @@ public class Main implements Callable<Integer> {
 		// ============================
 		// Enqueue data
 		// ============================
+		List<Map<String, String>> entries = null;
 		while (rs.next()) {
+			if (entries == null) {
+				entries = new ArrayList<Map<String, String>>();
+			}
 			Map<String, String> entry = new HashMap<String, String>();
 			for (int i = 1; i <= records; i++) {
 				entry.put(rsMeta.getColumnLabel(i).toLowerCase(), rs.getString(i));
 			}
-			enqueue(entry);
+			entries.add(entry);
+			if(entries.size() >= CONFIG.getInsertMultiCount()) {
+				enqueue(entries);
+				entries = null;
+			}
+		}
+		if(entries != null) {
+			enqueue(entries);
 		}
 		rs.close();
 		connection.close();
@@ -379,7 +395,7 @@ public class Main implements Callable<Integer> {
 	// ================================
 	// Insert single row
 	// ================================
-	private void insertRows(final Map<String, String> entry) {
+	private void insertRows(final List<Map<String, String>> entries) {
 		Connection conn = null;
 		int execCount = 0;
 
@@ -390,18 +406,22 @@ public class Main implements Callable<Integer> {
 				conn = CONFIG.getTargetDS().getConnection();
 				for (TargetTable targetTable : CONFIG.getTargetTables()) {
 					QueryType queryType = targetTable.getQueryType();
-					pstmt = conn.prepareStatement(queryType.getQuery(targetTable));
+					pstmt = conn.prepareStatement(queryType.getQuery(targetTable, entries.size()));
 					int pos = 1;
-					for (String column : queryType.getColumns(targetTable)) {
-						pstmt.setString(pos++, entry.get(column));
+					for (Map<String, String> entry: entries) {
+						generateID(entry);
+						for (String column : queryType.getColumns(targetTable)) {
+							pstmt.setString(pos++, entry.get(column));
+						}
 					}
-					targetTable.getInsertedRows().addAndGet((pstmt.executeUpdate() + 1) / 2);
+					pstmt.executeUpdate();
+					targetTable.getInsertedRows().addAndGet(entries.size());
 					pstmt.close();
 				}
 				return;
 			} catch (Exception e) {
 				System.out.println(e);
-				System.out.println("[ERROR] " + entry);
+//				System.out.println("[ERROR] " + entry);
 				sleep(CONFIG.getRetryMili());
 			} finally {
 				try {
