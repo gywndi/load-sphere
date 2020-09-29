@@ -59,12 +59,13 @@ public class Main implements Callable<Integer> {
 
 	public boolean exporting = true;
 
-	private final BlockingQueue<List<Map<String, String>>> queue = new ArrayBlockingQueue<List<Map<String, String>>>(1000);
+	private final BlockingQueue<List<Map<String, String>>> queue = new ArrayBlockingQueue<List<Map<String, String>>>(
+			1000);
 
 	public static void main(String[] args) {
 		Main loadSphere = new Main();
 		Integer exitCode = new CommandLine(loadSphere).execute(args);
-		
+
 		if (exitCode == 0) {
 			try {
 				loadSphere.migrationStart();
@@ -249,36 +250,51 @@ public class Main implements Callable<Integer> {
 		}).start();
 	}
 
+	private boolean isMysql(DataSource ds) throws SQLException {
+		Connection connection = ds.getConnection();
+		try {
+			connection.createStatement().executeQuery("select * from information_schema.engines");
+		} catch (Exception e) {
+			return false;
+		}
+		return true;
+	}
+
 	private void migrationStart() throws SQLException {
+
+		// ============================
+		// Check target database type
+		// ============================
+		if (!isMysql(CONFIG.getTargetDS())) {
+			System.out.println("Target is not mysql, set insertMultiCount to 1");
+			CONFIG.setInsertMultiCount(1);
+		}
+
 		// ============================
 		// Delete rows
 		// ============================
-		Connection connection = null;
-		connection = CONFIG.getTargetDS().getConnection();
+		Connection targetConn = CONFIG.getTargetDS().getConnection();
 		for (TargetTable targetTable : CONFIG.getTargetTables()) {
-			targetTable.delete(connection);
+			targetTable.delete(targetConn);
 		}
-		connection.close();
+		targetConn.close();
 
 		// ============================
 		// Get rows from source
 		// ============================
-		connection = CONFIG.getSourceDS().getConnection();
-		Statement statement = connection.createStatement(java.sql.ResultSet.TYPE_FORWARD_ONLY,
+		Connection sourceConn = CONFIG.getSourceDS().getConnection();
+		Statement sourceStmt = sourceConn.createStatement(java.sql.ResultSet.TYPE_FORWARD_ONLY,
 				java.sql.ResultSet.CONCUR_READ_ONLY);
-
-		try {
-			statement.executeQuery("select * from information_schema.engines");
-			System.out.println("Source is mysql, set fetch size to c");
-			statement.setFetchSize(Integer.MIN_VALUE);
-		}catch(Exception e) {
-			System.out.println("Source is not mysql, set fetch size to 5000 and insertMultiCount to 1");
-			CONFIG.setInsertMultiCount(1);
-			statement.setFetchSize(5000);
+		if (isMysql(CONFIG.getSourceDS())) {
+			System.out.println("Source is mysql, set fetch size to Integer.MIN_VALUE");
+			sourceStmt.setFetchSize(Integer.MIN_VALUE);
+		} else {
+			System.out.println("Source is not mysql, set fetch size to 5000");
+			sourceStmt.setFetchSize(5000);
 		}
 
 		System.out.println("> Get result set start");
-		ResultSet rs = statement.executeQuery(CONFIG.getExportQuery());
+		ResultSet rs = sourceStmt.executeQuery(CONFIG.getExportQuery());
 
 		// ============================
 		// Generate pstmt query
@@ -317,15 +333,14 @@ public class Main implements Callable<Integer> {
 				vals += ",?";
 				upds += String.format(",%s=values(%s)", entry.getValue(), entry.getValue());
 				targetTable.getInsertColumns().add(entry.getKey());
-//				targetTable.getUpsertColumns().add(entry.getKey());
 			}
-			
+
 			String insertBase = "";
 			insertBase += "insert into " + targetTable.getName();
 			insertBase += "(" + cols.replaceFirst(",", "") + ")";
 			insertBase += "values";
 			targetTable.setInsertBase(insertBase);
-			
+
 			String insertParam = ",(" + vals.replaceFirst(",", "") + ")";
 			targetTable.setInsertParam(insertParam);
 
@@ -355,16 +370,16 @@ public class Main implements Callable<Integer> {
 				entry.put(rsMeta.getColumnLabel(i).toLowerCase(), rs.getString(i));
 			}
 			entries.add(entry);
-			if(entries.size() >= CONFIG.getInsertMultiCount()) {
+			if (entries.size() >= CONFIG.getInsertMultiCount()) {
 				enqueue(entries);
 				entries = null;
 			}
 		}
-		if(entries != null) {
+		if (entries != null) {
 			enqueue(entries);
 		}
 		rs.close();
-		connection.close();
+		sourceConn.close();
 		exporting = false;
 	}
 
@@ -408,7 +423,7 @@ public class Main implements Callable<Integer> {
 					QueryType queryType = targetTable.getQueryType();
 					pstmt = conn.prepareStatement(queryType.getQuery(targetTable, entries.size()));
 					int pos = 1;
-					for (Map<String, String> entry: entries) {
+					for (Map<String, String> entry : entries) {
 						generateID(entry);
 						for (String column : queryType.getColumns(targetTable)) {
 							pstmt.setString(pos++, entry.get(column));

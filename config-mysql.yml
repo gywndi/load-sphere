@@ -18,9 +18,9 @@ targetDS: !!org.apache.commons.dbcp2.BasicDataSource
   minEvictableIdleTimeMillis : 1200000
   numTestsPerEvictionRun : 10
 
-#retryCount: 10
-#retryMili: 5000
-#insertMultiCount: 30
+retryCount: 10
+retryMili: 5000
+insertMultiCount: 30
 
 exportQuery: "select * from uldra where 1 = 1"
 idGenerator:
