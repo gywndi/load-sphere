@@ -42,11 +42,14 @@
 	</build>
 
 	<dependencies>
+
 		<dependency>
-			<groupId>org.apache.shardingsphere</groupId>
+			<groupId>io.shardingsphere</groupId>
 			<artifactId>sharding-jdbc-core</artifactId>
-			<version>4.1.1</version>
+			<version>3.1.0</version>
 		</dependency>
+		<!-- <dependency> <groupId>org.apache.shardingsphere</groupId> <artifactId>sharding-jdbc-core</artifactId> 
+			<version>4.1.0</version> </dependency> -->
 
 		<dependency>
 			<groupId>org.apache.commons</groupId>

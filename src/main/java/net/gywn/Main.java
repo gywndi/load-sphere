@@ -10,8 +10,7 @@ import java.sql.Statement;
 
 import javax.sql.DataSource;
 
-import org.apache.shardingsphere.shardingjdbc.api.yaml.YamlShardingDataSourceFactory;
-
+import io.shardingsphere.shardingjdbc.api.yaml.YamlShardingDataSourceFactory;
 import net.gywn.common.IDGenerator;
 import net.gywn.common.TargetTable;
 import net.gywn.common.TargetTable.QueryType;
@@ -68,7 +67,6 @@ public class Main implements Callable<Integer> {
 	public static void main(String[] args) {
 		Main loadSphere = new Main();
 		Integer exitCode = new CommandLine(loadSphere).execute(args);
-
 //		Integer exitCode = new CommandLine(loadSphere).execute(new String[] { "--config-file", "config-mysql.yml",
 //				"--target-sharding-config", "config-sharding.yml" });
 		if (exitCode == 0) {

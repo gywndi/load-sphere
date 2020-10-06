@@ -5,12 +5,13 @@ import java.util.Collection;
 import java.util.zip.CRC32;
 import java.util.zip.Checksum;
 
-import org.apache.shardingsphere.api.sharding.standard.PreciseShardingAlgorithm;
-import org.apache.shardingsphere.api.sharding.standard.PreciseShardingValue;
+import io.shardingsphere.api.algorithm.sharding.PreciseShardingValue;
+import io.shardingsphere.api.algorithm.sharding.standard.PreciseShardingAlgorithm;
 
 public class PreciseShardingCRC32 implements PreciseShardingAlgorithm<Comparable<?>> {
 
-	public String doSharding(Collection<String> availableTargetNames, PreciseShardingValue<Comparable<?>> shardingValue) {
+	public String doSharding(Collection<String> availableTargetNames,
+			PreciseShardingValue<Comparable<?>> shardingValue) {
 		ArrayList<String> list = new ArrayList<String>(availableTargetNames);
 		Checksum checksum = new CRC32();
 		try {
