@@ -8,9 +8,9 @@ import java.util.zip.Checksum;
 import org.apache.shardingsphere.api.sharding.standard.PreciseShardingAlgorithm;
 import org.apache.shardingsphere.api.sharding.standard.PreciseShardingValue;
 
-public class PreciseShardingCRC32 implements PreciseShardingAlgorithm<Comparable> {
+public class PreciseShardingCRC32 implements PreciseShardingAlgorithm<Comparable<?>> {
 
-	public String doSharding(Collection<String> availableTargetNames, PreciseShardingValue<Comparable> shardingValue) {
+	public String doSharding(Collection<String> availableTargetNames, PreciseShardingValue<Comparable<?>> shardingValue) {
 		ArrayList<String> list = new ArrayList<String>(availableTargetNames);
 		Checksum checksum = new CRC32();
 		try {
