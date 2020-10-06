@@ -43,9 +43,9 @@
 
 	<dependencies>
 		<dependency>
-			<groupId>io.shardingsphere</groupId>
+			<groupId>org.apache.shardingsphere</groupId>
 			<artifactId>sharding-jdbc-core</artifactId>
-			<version>3.1.0</version>
+			<version>4.1.1</version>
 		</dependency>
 
 		<dependency>

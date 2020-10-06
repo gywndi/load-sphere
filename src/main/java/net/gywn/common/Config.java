@@ -31,9 +31,10 @@ public class Config {
 	private IDGenerator idGenerator;
 	private TargetTable[] targetTables;
 	private boolean upsert = false;
+	private boolean insertIgnore = false;
 	private int retryCount = 10;
 	private int retryMili = 5000;
-	private int insertMultiCount = 30;
+	private int insertBatchCount = 30;
 
 	public static Config unmarshal(final File yamlFile) throws IOException, ClassNotFoundException {
 		Class.forName("com.mysql.jdbc.Driver");

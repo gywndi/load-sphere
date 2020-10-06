@@ -10,7 +10,8 @@ import java.sql.Statement;
 
 import javax.sql.DataSource;
 
-import io.shardingsphere.shardingjdbc.api.yaml.YamlShardingDataSourceFactory;
+import org.apache.shardingsphere.shardingjdbc.api.yaml.YamlShardingDataSourceFactory;
+
 import net.gywn.common.IDGenerator;
 import net.gywn.common.TargetTable;
 import net.gywn.common.TargetTable.QueryType;
@@ -26,12 +27,14 @@ import java.util.Map.Entry;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static picocli.CommandLine.*;
 
 public class Main implements Callable<Integer> {
 
 	public static Config CONFIG;
+	public static AtomicInteger currentWorkers = new AtomicInteger();
 
 	@Option(names = { "--config-file" }, description = "Config file", required = true)
 	private String configFile;
@@ -64,8 +67,10 @@ public class Main implements Callable<Integer> {
 
 	public static void main(String[] args) {
 		Main loadSphere = new Main();
-		Integer exitCode = new CommandLine(loadSphere).execute(args);
+//		Integer exitCode = new CommandLine(loadSphere).execute(args);
 
+		Integer exitCode = new CommandLine(loadSphere).execute(new String[] { "--config-file", "config-mysql.yml",
+				"--target-sharding-config", "config-sharding.yml" });
 		if (exitCode == 0) {
 			try {
 				loadSphere.migrationStart();
@@ -197,10 +202,13 @@ public class Main implements Callable<Integer> {
 						while (true) {
 							try {
 								List<Map<String, String>> entries = queue.take();
+								currentWorkers.incrementAndGet();
 								insertRows(entries);
 							} catch (Exception e) {
 								System.out.println(e);
 								System.exit(1);
+							} finally {
+								currentWorkers.decrementAndGet();
 							}
 						}
 					}
@@ -232,7 +240,7 @@ public class Main implements Callable<Integer> {
 
 			public void run() {
 				while (true) {
-					if (exporting || !queue.isEmpty()) {
+					if (exporting || !queue.isEmpty() || currentWorkers.get() > 0) {
 						for (TargetTable targetTable : CONFIG.getTargetTables()) {
 							System.out.println(String.format("%10s: %10d inserted", targetTable.getName(),
 									targetTable.getInsertedRows().get()));
@@ -253,10 +261,11 @@ public class Main implements Callable<Integer> {
 	private boolean isMysql(DataSource ds) throws SQLException {
 		Connection connection = ds.getConnection();
 		try {
-			connection.createStatement().executeQuery("select * from information_schema.engines");
+			connection.createStatement().executeQuery("show variables like '%innodb%'");
 		} catch (Exception e) {
 			return false;
 		}
+		connection.close();
 		return true;
 	}
 
@@ -266,8 +275,8 @@ public class Main implements Callable<Integer> {
 		// Check target database type
 		// ============================
 		if (!isMysql(CONFIG.getTargetDS())) {
-			System.out.println("Target is not mysql, set insertMultiCount to 1");
-			CONFIG.setInsertMultiCount(1);
+			System.out.println("Target is not mysql, set insertIgnore false");
+			CONFIG.setInsertIgnore(false);
 		}
 
 		// ============================
@@ -335,14 +344,12 @@ public class Main implements Callable<Integer> {
 				targetTable.getInsertColumns().add(entry.getKey());
 			}
 
-			String insertBase = "";
-			insertBase += "insert into " + targetTable.getName();
-			insertBase += "(" + cols.replaceFirst(",", "") + ")";
-			insertBase += "values";
-			targetTable.setInsertBase(insertBase);
-
-			String insertParam = ",(" + vals.replaceFirst(",", "") + ")";
-			targetTable.setInsertParam(insertParam);
+			String insertQuery = "";
+			insertQuery += "insert " + (CONFIG.isInsertIgnore() ? "ignore " : "") + "into " + targetTable.getName();
+			insertQuery += "(" + cols.replaceFirst(",", "") + ")";
+			insertQuery += "values";
+			insertQuery += "(" + vals.replaceFirst(",", "") + ")";
+			targetTable.setInsertQuery(insertQuery);
 
 			String upsertParam = " on duplicate key update " + upds.replaceFirst(",", "");
 			targetTable.setUpsertParam(upsertParam);
@@ -370,7 +377,7 @@ public class Main implements Callable<Integer> {
 				entry.put(rsMeta.getColumnLabel(i).toLowerCase(), rs.getString(i));
 			}
 			entries.add(entry);
-			if (entries.size() >= CONFIG.getInsertMultiCount()) {
+			if (entries.size() >= CONFIG.getInsertBatchCount()) {
 				enqueue(entries);
 				entries = null;
 			}
@@ -419,24 +426,35 @@ public class Main implements Callable<Integer> {
 			try {
 				execCount++;
 				conn = CONFIG.getTargetDS().getConnection();
+				conn.setAutoCommit(false);
 				for (TargetTable targetTable : CONFIG.getTargetTables()) {
 					QueryType queryType = targetTable.getQueryType();
-					pstmt = conn.prepareStatement(queryType.getQuery(targetTable, entries.size()));
-					int pos = 1;
+					pstmt = conn.prepareStatement(queryType.getQuery(targetTable));
 					for (Map<String, String> entry : entries) {
+						int pos = 1;
 						generateID(entry);
 						for (String column : queryType.getColumns(targetTable)) {
 							pstmt.setString(pos++, entry.get(column));
 						}
+						pstmt.addBatch();
+						pstmt.clearParameters();
 					}
-					pstmt.executeUpdate();
-					targetTable.getInsertedRows().addAndGet(entries.size());
+					pstmt.executeBatch();
 					pstmt.close();
+					targetTable.getInsertedRows().addAndGet(entries.size());
 				}
+				conn.commit();
+				conn.setAutoCommit(true);
 				return;
 			} catch (Exception e) {
 				System.out.println(e);
 //				System.out.println("[ERROR] " + entry);
+				try {
+					conn.rollback();
+				} catch (SQLException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				}
 				sleep(CONFIG.getRetryMili());
 			} finally {
 				try {
@@ -447,6 +465,16 @@ public class Main implements Callable<Integer> {
 		}
 		System.out.println("Retry count(" + CONFIG.getRetryCount() + ") has been exceeded, exit");
 		System.exit(1);
+	}
+
+	public static int getBatchedCount(int[] cnts) {
+		int r = 0;
+		for (int i : cnts) {
+			if (i > 0) {
+				r++;
+			}
+		}
+		return r;
 	}
 
 	public static void sleep(long ms) {

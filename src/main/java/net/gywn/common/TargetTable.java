@@ -21,11 +21,8 @@ public class TargetTable {
 	private String name;
 	private String[] columns;
 	private String deleteQuery;
-	private String insertBase;
-	private String insertParam;
-	private String upsertParam;
 	private String insertQuery;
-	private String upsertQuery;
+	private String upsertParam;
 	private final List<String> insertColumns = new ArrayList<String>();
 	private AtomicLong insertedRows = new AtomicLong();
 	private QueryType queryType = QueryType.INSERT;
@@ -34,12 +31,8 @@ public class TargetTable {
 		INSERT {
 
 			@Override
-			public String getQuery(TargetTable targetTable, int rowCount) {
-				StringBuffer sb = new StringBuffer();
-				for (int i = 0; i < rowCount; i++) {
-					sb.append(targetTable.getInsertParam());
-				}
-				return String.format("%s %s", targetTable.getInsertBase(), sb.toString().replaceFirst(",", ""));
+			public String getQuery(TargetTable targetTable) {
+				return targetTable.getInsertQuery();
 			}
 
 			@Override
@@ -51,13 +44,8 @@ public class TargetTable {
 		UPSERT {
 
 			@Override
-			public String getQuery(TargetTable targetTable, int rowCount) {
-				StringBuffer sb = new StringBuffer();
-				for (int i = 0; i < rowCount; i++) {
-					sb.append(targetTable.getInsertParam());
-				}
-				return String.format("%s %s %s", targetTable.getInsertBase(), sb.toString().replaceFirst(",", ""),
-						targetTable.getUpsertParam());
+			public String getQuery(TargetTable targetTable) {
+				return String.format("%s %s", targetTable.getInsertQuery(), targetTable.getUpsertParam());
 			}
 
 			@Override
@@ -67,7 +55,7 @@ public class TargetTable {
 			}
 		};
 
-		public abstract String getQuery(final TargetTable targetTable, final int rowCount);
+		public abstract String getQuery(final TargetTable targetTable);
 
 		public abstract List<String> getColumns(final TargetTable targetTable);
 	}
