@@ -1,11 +1,13 @@
 workers: 8
 
 sourceDS: !!org.apache.commons.dbcp2.BasicDataSource
+  driverClassName: com.mysql.jdbc.Driver
   url: jdbc:mysql://127.0.0.1:3306/origin?autoReconnect=true&cacheServerConfiguration=true&useLocalSessionState=true&elideSetAutoCommits=true&connectTimeout=3000&socketTimeout=60000&useSSL=false&useAffectedRows=false&cacheCallableStmts=true&noAccessToProcedureBodies=true&characterEncoding=utf8&characterSetResults=utf8&connectionCollation=utf8_bin
   username: origin
   password: origin
 
 targetDS: !!org.apache.commons.dbcp2.BasicDataSource
+  driverClassName: com.mysql.jdbc.Driver
   url: jdbc:mysql://127.0.0.1:3306/shard?autoReconnect=true&rewriteBatchedStatements=true&cacheServerConfiguration=true&useLocalSessionState=true&elideSetAutoCommits=true&connectTimeout=3000&socketTimeout=60000&useSSL=false&useAffectedRows=false&cacheCallableStmts=true&noAccessToProcedureBodies=true&characterEncoding=utf8&characterSetResults=utf8&connectionCollation=utf8_bin
   username: shard
   password: shard

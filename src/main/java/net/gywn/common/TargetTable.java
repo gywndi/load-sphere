@@ -75,7 +75,7 @@ public class TargetTable {
 			try {
 				affectedRows += pstmt.executeUpdate();
 			} catch (Exception e) {
-				System.out.println("Delete error, retry");
+				System.out.println(">>"+e);
 				Main.sleep(1000);
 				continue;
 			}
