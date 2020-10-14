@@ -14,9 +14,11 @@ import org.apache.shardingsphere.shardingjdbc.api.yaml.YamlShardingDataSourceFac
 
 //import io.shardingsphere.shardingjdbc.api.yaml.YamlShardingDataSourceFactory;
 import net.gywn.common.IDGenerator;
+import net.gywn.common.RowModifier;
 import net.gywn.common.TargetTable;
 import net.gywn.common.TargetTable.QueryType;
 import net.gywn.algorithm.IDGeneratorHandler;
+import net.gywn.algorithm.RowModifierHandler;
 import net.gywn.common.Config;
 import picocli.CommandLine;
 
@@ -68,9 +70,9 @@ public class Main implements Callable<Integer> {
 
 	public static void main(String[] args) throws ClassNotFoundException {
 		Main loadSphere = new Main();
-		Integer exitCode = new CommandLine(loadSphere).execute(args);
-//		Integer exitCode = new CommandLine(loadSphere).execute(new String[] { "--config-file", "config-mysql.yml",
-//				"--target-sharding-config", "config-sharding.yml" });
+//		Integer exitCode = new CommandLine(loadSphere).execute(args);
+		Integer exitCode = new CommandLine(loadSphere).execute(new String[] { "--config-file", "config-mysql.yml",
+				"--target-sharding-config", "config-sharding.yml" });
 		if (exitCode == 0) {
 			try {
 				loadSphere.migrationStart();
@@ -165,6 +167,9 @@ public class Main implements Callable<Integer> {
 				CONFIG.setTargetTables(targetTables);
 			}
 
+			// ============================
+			// ID Generator handler
+			// ============================
 			IDGenerator idGenerator = CONFIG.getIdGenerator();
 			if (idGenerator == null) {
 				System.out.println("ID Generator is not defined, do nothing");
@@ -193,6 +198,23 @@ public class Main implements Callable<Integer> {
 			}
 
 			// ============================
+			// Row modifier handler
+			// ============================
+			RowModifier rowModifier = CONFIG.getRowModifier();
+			if (rowModifier == null) {
+				System.out.println("Row Modifier is not defined, do nothing");
+				rowModifier = new RowModifier();
+				CONFIG.setRowModifier(rowModifier);
+			}
+
+			if (rowModifier.getClassName() != null) {
+				System.out.println("Initialize class: " + rowModifier.getClassName());
+				Class<?> c = Class.forName(rowModifier.getClassName());
+				RowModifierHandler handler = (RowModifierHandler) c.newInstance();
+				rowModifier.setRowModifierHandler(handler);
+			}
+
+			// ============================
 			// Start load threads
 			// ============================
 			System.out.println(">> Load thread counts " + CONFIG.getWorkers());
@@ -203,6 +225,14 @@ public class Main implements Callable<Integer> {
 							try {
 								List<Map<String, String>> entries = queue.take();
 								currentWorkers.incrementAndGet();
+
+								// massage rows (ID generate / Row modify)
+								for (Map<String, String> entry : entries) {
+									idGenerate(entry);
+									modifyRow(entry);
+								}
+
+								// insert target database
 								insertRows(entries);
 							} catch (Exception e) {
 								System.out.println(e);
@@ -393,25 +423,47 @@ public class Main implements Callable<Integer> {
 	// ================================
 	// Generate new ID for target table
 	// ================================
-	private void generateID(final Map<String, String> entry) {
-
-		if (CONFIG.getIdGenerator().getIdGeneratorHandler() != null) {
-			while (true) {
-				try {
+	private void idGenerate(final Map<String, String> entry) {
+		int execCount = 0;
+		while (execCount < CONFIG.getRetryCount()) {
+			try {
+				execCount++;
+				if (CONFIG.getIdGenerator().getIdGeneratorHandler() != null) {
 					String[] paramCols = CONFIG.getIdGenerator().getParams();
 					String[] paramVals = new String[paramCols.length];
 					for (int i = 0; i < paramCols.length; i++) {
 						paramVals[i] = entry.get(paramCols[i]);
 					}
-					String genValue = CONFIG.getIdGenerator().getIdGeneratorHandler().generate(paramVals);
-					entry.put(CONFIG.getIdGenerator().getColumnName(), genValue);
-					break;
-				} catch (Exception e) {
-					e.printStackTrace();
-					sleep(1000);
+					String idGenValue = CONFIG.getIdGenerator().getIdGeneratorHandler().generate(paramVals);
+					entry.put(CONFIG.getIdGenerator().getColumnName(), idGenValue);
 				}
+				return;
+			} catch (Exception e) {
+				System.out.println(e);
+				sleep(CONFIG.getRetryMili());
+			}
+
+		}
+		System.out.println("idGenerate - Retry count(" + CONFIG.getRetryCount() + ") has been exceeded, exit");
+		System.exit(1);
+	}
+
+	private void modifyRow(final Map<String, String> entry) {
+		int execCount = 0;
+		while (execCount < CONFIG.getRetryCount()) {
+			try {
+				execCount++;
+				if (CONFIG.getRowModifier().getRowModifierHandler() != null) {
+					CONFIG.getRowModifier().getRowModifierHandler().doModify(entry);
+				}
+				return;
+			} catch (Exception e) {
+				System.out.println(e);
+				sleep(CONFIG.getRetryMili());
 			}
 		}
+		System.out.println("modifyRow - Retry count(" + CONFIG.getRetryCount() + ") has been exceeded, exit");
+		System.exit(1);
 	}
 
 	// ================================
@@ -421,10 +473,13 @@ public class Main implements Callable<Integer> {
 		Connection conn = null;
 		int execCount = 0;
 
+		// Insert database
 		while (execCount < CONFIG.getRetryCount()) {
+
 			PreparedStatement pstmt = null;
 			try {
 				execCount++;
+
 				conn = CONFIG.getTargetDS().getConnection();
 				conn.setAutoCommit(false);
 				for (TargetTable targetTable : CONFIG.getTargetTables()) {
@@ -432,7 +487,6 @@ public class Main implements Callable<Integer> {
 					pstmt = conn.prepareStatement(queryType.getQuery(targetTable));
 					for (Map<String, String> entry : entries) {
 						int pos = 1;
-						generateID(entry);
 						for (String column : queryType.getColumns(targetTable)) {
 							pstmt.setString(pos++, entry.get(column));
 						}

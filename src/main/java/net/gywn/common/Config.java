@@ -29,6 +29,7 @@ public class Config {
 
 	private String exportQuery;
 	private IDGenerator idGenerator;
+	private RowModifier rowModifier;
 	private TargetTable[] targetTables;
 	private boolean upsert = false;
 	private boolean insertIgnore = false;
