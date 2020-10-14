@@ -7,7 +7,7 @@
 
 ## build & run
     mvn install
-    java -jar target/load-sphere-0.0.1-jar-with-dependencies.jar --config-file="config-mysql.yml"
+    java -jar target/load-sphere-0.0.1.jar --config-file="config-mysql.yml"
 
 ## Usage
 ```bash
