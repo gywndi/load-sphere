@@ -3,8 +3,11 @@ package net.gywn.algorithm;
 import java.util.ArrayList;
 import java.util.Collection;
 
-import io.shardingsphere.api.algorithm.sharding.PreciseShardingValue;
-import io.shardingsphere.api.algorithm.sharding.standard.PreciseShardingAlgorithm;
+import org.apache.shardingsphere.api.sharding.standard.PreciseShardingAlgorithm;
+import org.apache.shardingsphere.api.sharding.standard.PreciseShardingValue;
+
+//import io.shardingsphere.api.algorithm.sharding.PreciseShardingValue;
+//import io.shardingsphere.api.algorithm.sharding.standard.PreciseShardingAlgorithm;
 
 
 public class PreciseShardingJavaHash implements PreciseShardingAlgorithm<Comparable<?>> {

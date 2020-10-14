@@ -10,7 +10,9 @@ import java.sql.Statement;
 
 import javax.sql.DataSource;
 
-import io.shardingsphere.shardingjdbc.api.yaml.YamlShardingDataSourceFactory;
+import org.apache.shardingsphere.shardingjdbc.api.yaml.YamlShardingDataSourceFactory;
+
+//import io.shardingsphere.shardingjdbc.api.yaml.YamlShardingDataSourceFactory;
 import net.gywn.common.IDGenerator;
 import net.gywn.common.TargetTable;
 import net.gywn.common.TargetTable.QueryType;
@@ -64,7 +66,7 @@ public class Main implements Callable<Integer> {
 	private final BlockingQueue<List<Map<String, String>>> queue = new ArrayBlockingQueue<List<Map<String, String>>>(
 			1000);
 
-	public static void main(String[] args) {
+	public static void main(String[] args) throws ClassNotFoundException {
 		Main loadSphere = new Main();
 		Integer exitCode = new CommandLine(loadSphere).execute(args);
 //		Integer exitCode = new CommandLine(loadSphere).execute(new String[] { "--config-file", "config-mysql.yml",

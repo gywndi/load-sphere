@@ -5,8 +5,11 @@ import java.util.Collection;
 import java.util.zip.CRC32;
 import java.util.zip.Checksum;
 
-import io.shardingsphere.api.algorithm.sharding.PreciseShardingValue;
-import io.shardingsphere.api.algorithm.sharding.standard.PreciseShardingAlgorithm;
+import org.apache.shardingsphere.api.sharding.standard.PreciseShardingAlgorithm;
+import org.apache.shardingsphere.api.sharding.standard.PreciseShardingValue;
+
+//import io.shardingsphere.api.algorithm.sharding.PreciseShardingValue;
+//import io.shardingsphere.api.algorithm.sharding.standard.PreciseShardingAlgorithm;
 
 public class PreciseShardingCRC32 implements PreciseShardingAlgorithm<Comparable<?>> {
 
