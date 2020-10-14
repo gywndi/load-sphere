@@ -15,8 +15,6 @@ public class IDGeneratorHandlerImpl implements IDGeneratorHandler {
 	private static final long MAX_FILL_BITS = 0xffffffffffffffffL;
 	private static final long TIMESTAMP_BITMAP = MAX_FILL_BITS << (NODE_ID_BIT_LENGTH + SEQUENCE_BIT_LENGTH);
 	private static final long SEQUENCE_BITMAP = ~(MAX_FILL_BITS << SEQUENCE_BIT_LENGTH);
-	private static final long NODE_ID_BITMAP = ~(MAX_FILL_BITS << (NODE_ID_BIT_LENGTH + SEQUENCE_BIT_LENGTH)
-			| SEQUENCE_BITMAP);
 
 	private int _nodeId = 0;
 	private AtomicLong _sequence = new AtomicLong();
