@@ -25,6 +25,7 @@ retryCount: 10
 retryMili: 5000
 insertBatchCount: 100
 insertIgnore: false
+upsert: true
 
 exportQuery: "select * from uldra where 1 = 1"
 idGenerator:
@@ -36,7 +37,6 @@ rowModifier:
   properties:
     param1: "param1"
     param2: "param2"
-upsert: true
 targetTables:
 - name: "uldra"
   deleteQuery: "delete from uldra limit 10000"
