@@ -70,9 +70,9 @@ public class Main implements Callable<Integer> {
 
 	public static void main(String[] args) throws ClassNotFoundException {
 		Main loadSphere = new Main();
-//		Integer exitCode = new CommandLine(loadSphere).execute(args);
-		Integer exitCode = new CommandLine(loadSphere).execute(new String[] { "--config-file", "config-mysql.yml",
-				"--target-sharding-config", "config-sharding.yml" });
+		Integer exitCode = new CommandLine(loadSphere).execute(args);
+//		Integer exitCode = new CommandLine(loadSphere).execute(new String[] { "--config-file", "config-mysql.yml",
+//				"--target-sharding-config", "config-sharding.yml" });
 		if (exitCode == 0) {
 			try {
 				loadSphere.migrationStart();
