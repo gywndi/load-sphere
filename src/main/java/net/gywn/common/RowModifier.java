@@ -16,8 +16,6 @@ import net.gywn.algorithm.RowModifierHandlerImpl;
 @ToString
 public class RowModifier {
 	private String className;
-	private String[] params;
-	private String columnName;
 	private RowModifierHandler rowModifierHandler = new RowModifierHandlerImpl();
 	private Map<String, String> properties = new HashMap<String, String>();
 }
