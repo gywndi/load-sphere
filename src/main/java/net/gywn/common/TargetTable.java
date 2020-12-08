@@ -23,42 +23,9 @@ public class TargetTable {
 	private String deleteQuery;
 	private String insertQuery;
 	private String upsertParam;
+	private String bindingCols;
 	private final List<String> insertColumns = new ArrayList<String>();
 	private AtomicLong insertedRows = new AtomicLong();
-	private QueryType queryType = QueryType.INSERT;
-
-	public enum QueryType {
-		INSERT {
-
-			@Override
-			public String getQuery(TargetTable targetTable) {
-				return targetTable.getInsertQuery();
-			}
-
-			@Override
-			public List<String> getColumns(TargetTable targetTable) {
-				// TODO Auto-generated method stub
-				return targetTable.getInsertColumns();
-			}
-		},
-		UPSERT {
-
-			@Override
-			public String getQuery(TargetTable targetTable) {
-				return String.format("%s %s", targetTable.getInsertQuery(), targetTable.getUpsertParam());
-			}
-
-			@Override
-			public List<String> getColumns(TargetTable targetTable) {
-				// TODO Auto-generated method stub
-				return targetTable.getInsertColumns();
-			}
-		};
-
-		public abstract String getQuery(final TargetTable targetTable);
-
-		public abstract List<String> getColumns(final TargetTable targetTable);
-	}
 
 	public void delete(final Connection connection) throws SQLException {
 		if (deleteQuery == null || deleteQuery.trim().length() == 0) {
@@ -75,7 +42,7 @@ public class TargetTable {
 			try {
 				affectedRows += pstmt.executeUpdate();
 			} catch (Exception e) {
-				System.out.println(">>"+e);
+				System.out.println(">>" + e);
 				Main.sleep(1000);
 				continue;
 			}

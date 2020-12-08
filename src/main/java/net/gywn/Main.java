@@ -16,7 +16,6 @@ import org.apache.shardingsphere.shardingjdbc.api.yaml.YamlShardingDataSourceFac
 import net.gywn.common.IDGenerator;
 import net.gywn.common.RowModifier;
 import net.gywn.common.TargetTable;
-import net.gywn.common.TargetTable.QueryType;
 import net.gywn.algorithm.IDGeneratorHandler;
 import net.gywn.algorithm.RowModifierHandler;
 import net.gywn.common.Config;
@@ -65,14 +64,15 @@ public class Main implements Callable<Integer> {
 
 	public boolean exporting = true;
 
+	private boolean isMysqlSource = false;
+	private boolean isMysqlTarget = false;
+
 	private final BlockingQueue<List<Map<String, String>>> queue = new ArrayBlockingQueue<List<Map<String, String>>>(
 			1000);
 
 	public static void main(String[] args) throws ClassNotFoundException {
 		Main loadSphere = new Main();
 		Integer exitCode = new CommandLine(loadSphere).execute(args);
-//		Integer exitCode = new CommandLine(loadSphere).execute(new String[] { "--config-file", "config-mysql.yml",
-//				"--target-sharding-config", "config-sharding.yml" });
 		if (exitCode == 0) {
 			try {
 				loadSphere.migrationStart();
@@ -302,35 +302,39 @@ public class Main implements Callable<Integer> {
 	private void migrationStart() throws SQLException {
 
 		// ============================
-		// Check target database type
+		// Create connection pool
 		// ============================
-		if (!isMysql(CONFIG.getTargetDS())) {
-			System.out.println("Target is not mysql, set insertIgnore false");
-			CONFIG.setInsertIgnore(false);
-		}
-
-		// ============================
-		// Delete rows
-		// ============================
+		Connection sourceConn = CONFIG.getSourceDS().getConnection();
 		Connection targetConn = CONFIG.getTargetDS().getConnection();
-		for (TargetTable targetTable : CONFIG.getTargetTables()) {
-			targetTable.delete(targetConn);
-		}
-		targetConn.close();
+		isMysqlSource = isMysql(CONFIG.getSourceDS());
+		isMysqlTarget = isMysql(CONFIG.getTargetDS());
 
 		// ============================
 		// Get rows from source
 		// ============================
-		Connection sourceConn = CONFIG.getSourceDS().getConnection();
 		Statement sourceStmt = sourceConn.createStatement(java.sql.ResultSet.TYPE_FORWARD_ONLY,
 				java.sql.ResultSet.CONCUR_READ_ONLY);
-		if (isMysql(CONFIG.getSourceDS())) {
+		if (isMysqlSource) {
 			System.out.println("Source is mysql, set fetch size to Integer.MIN_VALUE");
 			sourceStmt.setFetchSize(Integer.MIN_VALUE);
 		} else {
 			System.out.println("Source is not mysql, set fetch size to 5000");
 			sourceStmt.setFetchSize(5000);
 		}
+
+		if (!isMysqlTarget) {
+			System.out.println("Target is not mysql, set insert ignore false and upsert mode false");
+			CONFIG.setInsertIgnore(false);
+			CONFIG.setUpsert(false);
+		}
+
+		// ============================
+		// Delete rows (target)
+		// ============================
+		for (TargetTable targetTable : CONFIG.getTargetTables()) {
+			targetTable.delete(targetConn);
+		}
+		targetConn.close();
 
 		System.out.println("> Get result set start");
 		ResultSet rs = sourceStmt.executeQuery(CONFIG.getExportQuery());
@@ -341,10 +345,10 @@ public class Main implements Callable<Integer> {
 		ResultSetMetaData rsMeta = rs.getMetaData();
 		int records = rsMeta.getColumnCount();
 
-		// ============================
 		// Config target tables
-		// ============================
 		for (TargetTable targetTable : CONFIG.getTargetTables()) {
+
+			// target is all columns
 			if (targetTable.getColumns() == null) {
 				String[] columns = new String[records];
 				for (int i = 0; i < columns.length; i++) {
@@ -353,6 +357,7 @@ public class Main implements Callable<Integer> {
 				targetTable.setColumns(columns);
 			}
 
+			// column rename mapper
 			Map<String, String> map = new HashMap<String, String>();
 			for (String column : targetTable.getColumns()) {
 				String[] arr = column.toLowerCase().split(":");
@@ -361,6 +366,7 @@ public class Main implements Callable<Integer> {
 				map.put(sColumnName, tColumnName);
 			}
 
+			// ID generator mapper
 			if (CONFIG.getIdGenerator().getColumnName() != null) {
 				String genColumnName = CONFIG.getIdGenerator().getColumnName().toLowerCase();
 				map.put(genColumnName, genColumnName);
@@ -374,19 +380,22 @@ public class Main implements Callable<Integer> {
 				targetTable.getInsertColumns().add(entry.getKey());
 			}
 
+			// Binding columns
+			String bindingCols = "(" + vals.replaceFirst(",", "") + ")";
+			targetTable.setBindingCols(bindingCols);
+
+			// Insert query
 			String insertQuery = "";
 			insertQuery += "insert " + (CONFIG.isInsertIgnore() ? "ignore " : "") + "into " + targetTable.getName();
 			insertQuery += "(" + cols.replaceFirst(",", "") + ")";
 			insertQuery += "values";
-			insertQuery += "(" + vals.replaceFirst(",", "") + ")";
+			insertQuery += bindingCols;
 			targetTable.setInsertQuery(insertQuery);
 
+			// Upsert params
 			String upsertParam = " on duplicate key update " + upds.replaceFirst(",", "");
 			targetTable.setUpsertParam(upsertParam);
 
-			if (CONFIG.isUpsert()) {
-				targetTable.setQueryType(TargetTable.QueryType.UPSERT);
-			}
 		}
 
 		// ============================
@@ -448,6 +457,9 @@ public class Main implements Callable<Integer> {
 		System.exit(1);
 	}
 
+	// ================================
+	// Modify row
+	// ================================
 	private void modifyRow(final Map<String, String> entry) {
 		int execCount = 0;
 		while (execCount < CONFIG.getRetryCount()) {
@@ -483,30 +495,53 @@ public class Main implements Callable<Integer> {
 				conn = CONFIG.getTargetDS().getConnection();
 				conn.setAutoCommit(false);
 				for (TargetTable targetTable : CONFIG.getTargetTables()) {
-					QueryType queryType = targetTable.getQueryType();
-					pstmt = conn.prepareStatement(queryType.getQuery(targetTable));
-					for (Map<String, String> entry : entries) {
-						int pos = 1;
-						for (String column : queryType.getColumns(targetTable)) {
-							pstmt.setString(pos++, entry.get(column));
+					StringBuffer sbInsert = new StringBuffer();
+					sbInsert.append(targetTable.getInsertQuery());
+
+					if (isMysqlTarget) {
+
+						// extended-insert
+						for (int i = 0; i < entries.size() - 1; i++) {
+							sbInsert.append(",").append(targetTable.getBindingCols());
 						}
-						pstmt.addBatch();
-						pstmt.clearParameters();
+						if (CONFIG.isUpsert()) {
+							sbInsert.append(targetTable.getUpsertParam());
+						}
+
+						int pos = 1;
+						pstmt = conn.prepareStatement(sbInsert.toString());
+						for (Map<String, String> entry : entries) {
+							for (String column : targetTable.getInsertColumns()) {
+								pstmt.setString(pos++, entry.get(column));
+							}
+						}
+						pstmt.execute();
+						pstmt.close();
+					} else {
+						// batch insert
+						pstmt = conn.prepareStatement(sbInsert.toString());
+						for (Map<String, String> entry : entries) {
+							int pos = 1;
+							for (String column : targetTable.getInsertColumns()) {
+								pstmt.setString(pos++, entry.get(column));
+							}
+							pstmt.addBatch();
+							pstmt.clearParameters();
+						}
+						pstmt.executeBatch();
+						pstmt.close();
 					}
-					pstmt.executeBatch();
-					pstmt.close();
 					targetTable.getInsertedRows().addAndGet(entries.size());
+
 				}
 				conn.commit();
 				conn.setAutoCommit(true);
 				return;
 			} catch (Exception e) {
 				System.out.println(e);
-//				System.out.println("[ERROR] " + entry);
 				try {
 					conn.rollback();
 				} catch (SQLException e1) {
-					// TODO Auto-generated catch block
 					e1.printStackTrace();
 				}
 				sleep(CONFIG.getRetryMili());
