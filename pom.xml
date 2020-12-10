@@ -4,7 +4,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>net.gywn</groupId>
 	<artifactId>load-sphere</artifactId>
-	<version>0.0.1</version>
+	<version>0.0.2</version>
 	<name>uldra-sphere</name>
 	<build>
 		<plugins>

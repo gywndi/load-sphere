@@ -84,7 +84,6 @@ public class Main implements Callable<Integer> {
 	public static void main(String[] args) throws ClassNotFoundException {
 		Main loadSphere = new Main();
 		Integer exitCode = new CommandLine(loadSphere).execute(args);
-
 		if (exitCode == 0) {
 			try {
 				loadSphere.migrationStart();
@@ -176,6 +175,10 @@ public class Main implements Callable<Integer> {
 
 			if (partitionKey != null) {
 				CONFIG.setPartitionKey(partitionKey);
+			}
+			
+			if(CONFIG.getPartitionKey() != null) {
+				CONFIG.setPartitionKey(CONFIG.getPartitionKey().toLowerCase().trim());
 			}
 
 			if (batchCount != null) {
@@ -398,6 +401,7 @@ public class Main implements Callable<Integer> {
 		targetConn.close();
 
 		System.out.println("> Get result set start");
+		System.out.println("> Query\n"+CONFIG.getExportQuery());
 		ResultSet rs = sourceStmt.executeQuery(CONFIG.getExportQuery());
 
 		// ============================
