@@ -66,7 +66,7 @@ targetDS: !!org.apache.commons.dbcp2.BasicDataSource
 
 retryCount: 10
 retryMili: 5000
-insertBatchCount: 100
+batchCount: 100
 insertIgnore: false
 
 exportQuery: "select * from uldra where 1 = 1"

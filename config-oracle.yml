@@ -20,8 +20,9 @@ targetDS: !!org.apache.commons.dbcp2.BasicDataSource
 
 retryCount: 10
 retryMili: 5000
-insertBatchCount: 30
+batchCount: 300
 insertIgnore: false
+partitionKey: name
 
 exportQuery: "select * from T_USER"
 
