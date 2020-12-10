@@ -24,6 +24,7 @@ public class Config {
 	private String sourceURL;
 	private String sourceUsername;
 	private String sourcePassword;
+	private String partitionKey;
 	private DataSource sourceDS;
 	private DataSource targetDS;
 
@@ -35,7 +36,7 @@ public class Config {
 	private boolean insertIgnore = false;
 	private int retryCount = 10;
 	private int retryMili = 5000;
-	private int insertBatchCount = 30;
+	private int batchCount = 30;
 
 	public static Config unmarshal(final File yamlFile) throws IOException, ClassNotFoundException {
 		Class.forName("com.mysql.jdbc.Driver");
@@ -44,5 +45,9 @@ public class Config {
 				InputStreamReader inputStreamReader = new InputStreamReader(fileInputStream, "UTF-8")) {
 			return new Yaml(new Constructor(Config.class)).loadAs(inputStreamReader, Config.class);
 		}
+	}
+
+	public static void main(String[] args) {
+//		boolean[]
 	}
 }

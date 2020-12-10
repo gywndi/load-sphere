@@ -12,7 +12,6 @@ import javax.sql.DataSource;
 
 import org.apache.shardingsphere.shardingjdbc.api.yaml.YamlShardingDataSourceFactory;
 
-//import io.shardingsphere.shardingjdbc.api.yaml.YamlShardingDataSourceFactory;
 import net.gywn.common.IDGenerator;
 import net.gywn.common.RowModifier;
 import net.gywn.common.TargetTable;
@@ -26,17 +25,19 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Random;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.zip.CRC32;
+import java.util.zip.Checksum;
 
 import static picocli.CommandLine.*;
 
 public class Main implements Callable<Integer> {
 
 	public static Config CONFIG;
-	public static AtomicInteger currentWorkers = new AtomicInteger();
+	public static Random RAND = new Random();
 
 	@Option(names = { "--config-file" }, description = "Config file", required = true)
 	private String configFile;
@@ -62,17 +63,28 @@ public class Main implements Callable<Integer> {
 	@Option(names = { "--target-delete-query" }, description = "Target delete query")
 	private String targetDeleteQuery;
 
-	public boolean exporting = true;
+	@Option(names = { "--partition-key" }, description = "Partition source key from groupping")
+	private String partitionKey;
 
+	@Option(names = { "--batch-conut" }, description = "Insert batch count")
+	private Integer batchCount;
+
+	@Option(names = { "--insert-ignore" }, description = "Insert ignore mode")
+	private Boolean insertIgnore;
+
+	@Option(names = { "--upsert" }, description = "Upsert mode")
+	private Boolean upsert;
+
+	private boolean isExporting = true;
 	private boolean isMysqlSource = false;
 	private boolean isMysqlTarget = false;
-
-	private final BlockingQueue<List<Map<String, String>>> queue = new ArrayBlockingQueue<List<Map<String, String>>>(
-			1000);
+	private BlockingQueue<Map<String, String>>[] queues;
+	private boolean[] threadRunning;
 
 	public static void main(String[] args) throws ClassNotFoundException {
 		Main loadSphere = new Main();
 		Integer exitCode = new CommandLine(loadSphere).execute(args);
+
 		if (exitCode == 0) {
 			try {
 				loadSphere.migrationStart();
@@ -162,6 +174,22 @@ public class Main implements Callable<Integer> {
 				useCustomTargetTable = true;
 			}
 
+			if (partitionKey != null) {
+				CONFIG.setPartitionKey(partitionKey);
+			}
+
+			if (batchCount != null) {
+				CONFIG.setBatchCount(batchCount);
+			}
+
+			if (insertIgnore != null) {
+				CONFIG.setInsertIgnore(insertIgnore);
+			}
+
+			if (upsert != null) {
+				CONFIG.setUpsert(upsert);
+			}
+
 			if (useCustomTargetTable) {
 				TargetTable[] targetTables = { customTargetTable };
 				CONFIG.setTargetTables(targetTables);
@@ -215,32 +243,65 @@ public class Main implements Callable<Integer> {
 			}
 
 			// ============================
-			// Start load threads
+			// Data load threads
 			// ============================
 			System.out.println(">> Load thread counts " + CONFIG.getWorkers());
+			queues = new BlockingQueue[CONFIG.getWorkers()];
+			threadRunning = new boolean[CONFIG.getWorkers()];
 			for (int i = 0; i < CONFIG.getWorkers(); i++) {
+				final int threadNumber = i;
+				final BlockingQueue<Map<String, String>> queue = new ArrayBlockingQueue<Map<String, String>>(1000);
+
+				// ========================
+				// initialize queue
+				// ========================
+				queues[threadNumber] = queue;
+				threadRunning[threadNumber] = true;
+
+				// ============================
+				// Start thread
+				// ============================
 				new Thread(new Runnable() {
 					public void run() {
+						List<Map<String, String>> entries = null;
 						while (true) {
-							try {
-								List<Map<String, String>> entries = queue.take();
-								currentWorkers.incrementAndGet();
 
-								// massage rows (ID generate / Row modify)
-								for (Map<String, String> entry : entries) {
-									idGenerate(entry);
-									modifyRow(entry);
-								}
+							Map<String, String> entry = queue.poll();
 
-								// insert target database
+							// finish or wait 50ms
+							if (!isExporting && entry == null) {
+								break;
+							} else if (entry == null) {
+								sleep(50);
+								continue;
+							}
+
+							if (entries == null) {
+								entries = new ArrayList<Map<String, String>>();
+							}
+
+							// ID generate
+							idGenerate(entry);
+
+							// modify row values
+							modifyRow(entry);
+
+							// add entry array (single batch insert)
+							entries.add(entry);
+
+							if (entries.size() >= CONFIG.getBatchCount()) {
 								insertRows(entries);
-							} catch (Exception e) {
-								System.out.println(e);
-								System.exit(1);
-							} finally {
-								currentWorkers.decrementAndGet();
+								entries = null;
 							}
 						}
+
+						// last insert
+						if (entries != null) {
+							insertRows(entries);
+						}
+
+						// set running thread flag false
+						threadRunning[threadNumber] = false;
 					}
 				}).start();
 			}
@@ -254,10 +315,10 @@ public class Main implements Callable<Integer> {
 	// ============================
 	// Enqueue
 	// ============================
-	private void enqueue(final List<Map<String, String>> entries) {
+	private void enqueue(final Map<String, String> entries, final int slot) {
 		while (true) {
 			try {
-				queue.add(entries);
+				queues[slot].add(entries);
 				break;
 			} catch (Exception e) {
 				Main.sleep(10);
@@ -270,7 +331,7 @@ public class Main implements Callable<Integer> {
 
 			public void run() {
 				while (true) {
-					if (exporting || !queue.isEmpty() || currentWorkers.get() > 0) {
+					if (isExporting || isWorking()) {
 						for (TargetTable targetTable : CONFIG.getTargetTables()) {
 							System.out.println(String.format("%10s: %10d inserted", targetTable.getName(),
 									targetTable.getInsertedRows().get()));
@@ -406,27 +467,24 @@ public class Main implements Callable<Integer> {
 		// ============================
 		// Enqueue data
 		// ============================
-		List<Map<String, String>> entries = null;
 		while (rs.next()) {
-			if (entries == null) {
-				entries = new ArrayList<Map<String, String>>();
-			}
 			Map<String, String> entry = new HashMap<String, String>();
 			for (int i = 1; i <= records; i++) {
 				entry.put(rsMeta.getColumnLabel(i).toLowerCase(), rs.getString(i));
 			}
-			entries.add(entry);
-			if (entries.size() >= CONFIG.getInsertBatchCount()) {
-				enqueue(entries);
-				entries = null;
+
+			int slot;
+			if (entry.containsKey(CONFIG.getPartitionKey())) {
+				slot = getSlot(entry.get(CONFIG.getPartitionKey()));
+			} else {
+				slot = RAND.nextInt(CONFIG.getWorkers());
 			}
-		}
-		if (entries != null) {
-			enqueue(entries);
+			enqueue(entry, slot);
+
 		}
 		rs.close();
 		sourceConn.close();
-		exporting = false;
+		isExporting = false;
 	}
 
 	// ================================
@@ -571,5 +629,25 @@ public class Main implements Callable<Integer> {
 			Thread.sleep(ms);
 		} catch (InterruptedException e) {
 		}
+	}
+
+	public int getSlot(final String s) {
+		Checksum checksum = new CRC32();
+		try {
+			byte[] bytes = s.getBytes();
+			checksum.update(bytes, 0, bytes.length);
+			return (int) (checksum.getValue() % CONFIG.getWorkers());
+		} catch (Exception e) {
+		}
+		return 0;
+	}
+
+	public boolean isWorking() {
+		for (boolean b : threadRunning) {
+			if (b) {
+				return true;
+			}
+		}
+		return false;
 	}
 }

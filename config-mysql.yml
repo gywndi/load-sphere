@@ -23,11 +23,12 @@ targetDS: !!org.apache.commons.dbcp2.BasicDataSource
 
 retryCount: 10
 retryMili: 5000
-insertBatchCount: 100
+batchCount: 300
 insertIgnore: false
 upsert: true
+partitionKey: name
 
-exportQuery: "select * from uldra where 1 = 1"
+exportQuery: "select * from uldra where 1 = 1 order by id desc"
 idGenerator:
   className: "net.gywn.algorithm.IDGeneratorHandlerImpl"
   params: ["dttm"]
